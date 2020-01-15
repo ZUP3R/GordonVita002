@@ -125,12 +125,19 @@ class FTPLog {
         std::string str;
         GColor col;
     };
-    FTPLog() {
+    FTPLog() 
+    {
         fontHeight = 19;
         maxEntries = (440 / fontHeight) - 1;
     }
 
-    void clear() {
+    ~FTPLog() 
+    {
+        clear();
+    }
+
+    void clear() 
+    {
         entries.clear();
     }
 
@@ -533,9 +540,9 @@ int main(int argc, char* argv[])
 
     vita2d_fini();
     delete g_pDraw;
-    delete g_pFTPLog;
     GFonts::release();
     ftpvita_fini();
+    delete g_pFTPLog;
     net::release();
     sceAppUtilPhotoUmount();
 	sceAppUtilMusicUmount();

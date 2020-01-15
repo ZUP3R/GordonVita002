@@ -28,8 +28,6 @@ elif [ $1 == "u2" ]; then
 	rebuild
 	make send2
 elif [ $1 == "s1" ]; then
-	nc 10.0.0.8 1338 >&/dev/null
-	sleep 3
 	make send1
 elif [ $1 == "s2" ]; then
 	make send2
