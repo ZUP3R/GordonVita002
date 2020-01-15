@@ -1,0 +1,42 @@
+#!/bin/bash
+
+rebuild() {
+	make clean
+	make
+}
+
+if [ -z $1 ]; then
+	make
+elif [ $1 == "r" ]; then
+	rebuild
+elif [ $1 == "rd" ]; then
+	make clean-deps
+	make deps -j5
+elif [ $1 == "ra" ]; then
+	make clean-all
+	make
+elif [ $1 == "i1" ]; then
+	rebuild
+	make vpksend1
+elif [ $1 == "i2" ]; then
+	rebuild
+	make vpksend2
+elif [ $1 == "u1" ]; then
+	rebuild
+	make send1
+elif [ $1 == "u2" ]; then
+	rebuild
+	make send2
+elif [ $1 == "s1" ]; then
+	nc 10.0.0.8 1338 >&/dev/null
+	sleep 3
+	make send1
+elif [ $1 == "s2" ]; then
+	make send2
+elif [ $1 == "c" ]; then
+	make clean
+elif [ $1 == "cd" ]; then
+	make clean-deps
+elif [ $1 == "ca" ]; then
+	make clean-all
+fi
