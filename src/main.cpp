@@ -246,7 +246,7 @@ GPage pageHomeScreen("FTPVita", [](void* arg) -> void {
         "Listening on IP %s:%i\n", vita_ip, vita_port);
 
     if(logo)
-        vita2d_draw_texture(logo, 960 / 2 - 64, 544 / 2 - 64);
+        vita2d_draw_texture(logo, 960 / 2 - 75, 544 / 2 - 62);
 
     if(showlog)
         g_pFTPLog->render();
@@ -455,13 +455,13 @@ int main(int argc, char* argv[])
     auto tid = sceKernelCreateThread("anti-suspend-thread", [] (unsigned int a, void *b) -> int {
         for(;;) {
             sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DISABLE_AUTO_SUSPEND);
-            //sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DISABLE_OLED_OFF);
+            sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DISABLE_OLED_OFF);
             //sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DISABLE_OLED_DIMMING);
             sceKernelDelayThread(250000);
             if(doBreak)
                 break;
         }
-        sceKernelExitThread(0);
+        sceKernelExitDeleteThread(0);
         return 0;
     }, 0x10000100, 0x10000, 0, 0, nullptr);
     sceKernelStartThread(tid, 0, nullptr);
@@ -547,6 +547,9 @@ int main(int argc, char* argv[])
     sceAppUtilPhotoUmount();
 	sceAppUtilMusicUmount();
     sceAppUtilShutdown();
+    int status = 0;
+    uint32_t timeout = 500;
+    sceKernelWaitThreadEnd(tid, &status, &timeout);
 
     if (app && eboot)
 	{

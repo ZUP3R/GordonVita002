@@ -60,16 +60,16 @@ clean:
 clean-all: clean clean-deps
 
 vpksend1: $(OUT)/$(TARGET).vpk
-	curl -T $(OUT)/$(TARGET).vpk ftp://10.0.0.8:1337/ux0:/
+	curl -T $(OUT)/$(TARGET).vpk ftp://192.168.2.15:1337/ux0:/
 
 vpksend2: $(OUT)/$(TARGET).vpk
-	curl -T $(OUT)/$(TARGET).vpk ftp://pstv:1337/ux0:/
+	curl -T $(OUT)/$(TARGET).vpk ftp://192.168.2.14:1337/ux0:/
 
 send1: $(OUT)/eboot.bin
-	@curl -s -T $(OUT)/eboot.bin ftp://10.0.0.8:1337/ux0:/app/$(TITLE_ID)/
+	@curl -s -T $(OUT)/eboot.bin ftp://192.168.2.15:1337/ux0:/app/$(TITLE_ID)/
 
 send2: $(OUT)/eboot.bin
-	curl -T $(OUT)/eboot.bin ftp://pstv:1337/ux0:/app/$(TITLE_ID)/
+	curl -T $(OUT)/eboot.bin ftp://192.168.2.14:1337/ux0:/app/$(TITLE_ID)/
 
 deps:
 	@make -C deps/libvita2d

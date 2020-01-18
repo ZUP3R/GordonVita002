@@ -1,6 +1,7 @@
 #include "clib.h"
 #include "GDraw.h"
 #include "fonts/Iceland.h"
+#include "logo.h"
 
 #include <psp2/kernel/clib.h> 
 
@@ -120,7 +121,7 @@ GDraw::~GDraw()
 
 void GDraw::init()
 {
-    logo = vita2d_load_PNG_file("app0:sce_sys/icon0.png");
+    logo = vita2d_load_PNG_buffer(LOGO);
 }
 
 void GDraw::release()
