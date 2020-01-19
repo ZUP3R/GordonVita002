@@ -10,6 +10,7 @@
 #include <psp2/sysmodule.h>
 #include <psp2/touch.h>
 #include <psp2/power.h>
+#include <psp2/vshbridge.h> 
 #include <psp2/kernel/rng.h> 
 #include <psp2/kernel/clib.h>
 
@@ -31,6 +32,7 @@
 using namespace std;
 
 GTimer::Measure m;
+bool dolce = false;
 bool launch_ftp = false;
 bool doBreak = false;
 char vita_ip[16] = {0};
@@ -234,9 +236,20 @@ FTPLog *g_pFTPLog = nullptr;
 GPage pageHomeScreen("FTPVita", [](void* arg) -> void {
     (void)arg;
 
+    int runtime = m.now() / 1000 / 1000;
+    int hours = (runtime / 3600);
+    int minutes = (runtime / 60) - (hours * 3600);
+    int seconds = runtime - (minutes * 60);
+    
+    char buf[32] = { 0 };
+    my_snprintf(buf, sizeof(buf), "%ds", seconds);
+    if(minutes)
+        my_snprintf(buf, sizeof(buf), "%dm%ds", minutes, seconds);
+    if(hours)
+        my_snprintf(buf, sizeof(buf), "%dh%dm%ds", hours, minutes, seconds);
+
     GFonts::text(GFonts::mainFont, 20, GFonts::right, GPoint(950, 50), color_grey,
-        "Running since %.2f min",
-        double(m.now()) / 1000.0f / 1000.0f / 60.0f);
+        "Running since %s", buf);
 
      GFonts::text(GFonts::mainFont, 20, GFonts::left, GPoint(10, 530), color_grey,
         "[ ] to exit, X to %s log, O to clear log, /\\ to turn screen off", showlog ? "hide" : "show");
@@ -244,6 +257,17 @@ GPage pageHomeScreen("FTPVita", [](void* arg) -> void {
     if(my_strlen(vita_ip)) 
         GFonts::text(GFonts::mainFont, 20, GFonts::left, GPoint(10, 50), color_white,
         "Listening on IP %s:%i\n", vita_ip, vita_port);
+
+    static uint64_t max_size = 0, free_size = 0;
+    static int count = 0;
+    if(++count == 60) {
+        //an expensive call. better not call in main/render thread
+        sceAppMgrGetDevInfo("ux0:", &max_size, &free_size);
+        count = 0;
+    }
+    
+    GFonts::text(GFonts::mainFont, 20, GFonts::right, GPoint(950, 530), color_grey,
+        "%.2f MB free", double(free_size) / 1000.0f / 1000.0f);
 
     if(logo)
         vita2d_draw_texture(logo, 960 / 2 - 75, 544 / 2 - 62);
@@ -379,6 +403,8 @@ public:
             sceRtcGetCurrentClockLocalTime(&time);
 
             auto bat = scePowerGetBatteryLifePercent();
+            if(dolce)
+                bat = 100;
 
             GFonts::text(GFonts::mainFont, 20, GFonts::right, GPoint(960, 20), color_white,
                 "%s%d%%  %02d.%02d.%02d  %02d:%02d:%02d.%01d", 
@@ -429,6 +455,9 @@ void buttonRelease(uint32_t key, uint64_t endPressTime, uint64_t duration)
     if (key == SCE_CTRL_SELECT && duration > 1500000) {
         scePowerRequestColdReset();
     }
+
+    if(key == SCE_CTRL_START)
+        launch_ftp = true;
 }
 
 void draw()
@@ -474,6 +503,8 @@ int main(int argc, char* argv[])
 	my_memset(&boot_param, 0, sizeof(SceAppUtilBootParam));
 	sceAppUtilInit(&init_param, &boot_param);
 
+    dolce = (vshSblAimgrIsDolce() > 0);
+
     ftpvita_set_info_log_cb(info_log);
 
     net::init();
@@ -505,7 +536,7 @@ int main(int argc, char* argv[])
     }
 
     g_pPageMgr->set("FTPVita");
-
+    
     ftpvita_add_device("app0:");
 	ftpvita_add_device("ux0:");
 	ftpvita_add_device("ur0:");
@@ -530,7 +561,7 @@ int main(int argc, char* argv[])
 
     do {
         auto start = GTimer::GetTickCount();
-        if (doBreak)
+        if (doBreak || launch_ftp)
             break;
         auto end = GTimer::GetTickCount();
         gfx_render();
@@ -550,9 +581,14 @@ int main(int argc, char* argv[])
     int status = 0;
     uint32_t timeout = 500;
     sceKernelWaitThreadEnd(tid, &status, &timeout);
+    
+    if(launch_ftp) {
 
-    if (app && eboot)
-	{
+		char uri[] = "psgm:play?titleid=GVITAX002";
+		sceAppMgrLaunchAppByUri(0x20000, uri);
+		sceKernelDelayThread(0);
+    }
+    else if (app && eboot) {
 		char uri[64] = "";
 		my_snprintf(uri, 64, "psgm:play?titleid=%s", LAUNCH_TITLE_ID);
 		sceAppMgrLaunchAppByUri(0x20000, uri);

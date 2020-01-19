@@ -15,7 +15,7 @@ CXXWARNINGS = -Wall -Wextra -Wformat=2 -Winit-self -Wmissing-include-dirs \
 CXXOPTIMATION = -O3
 CXXFLAGS = -std=gnu++17 $(CXXWARNINGS) $(CXXOPTIMATION) -Ideps/libvita2d/include
 LIBS = deps/libvita2d/libvita2d.a \
-	-lpthread -lSceDisplay_stub -lSceGxm_stub \
+	-lpthread -lSceDisplay_stub -lSceGxm_stub -lSceVshBridge_stub  \
 	-lSceSysmodule_stub -lSceCtrl_stub -lSceAppMgr_stub \
 	-lSceRtc_stub -lSceNet_stub -lSceNetCtl_stub -lSceAppUtil_stub \
 	-lScePower_stub -lScePgf_stub -lfreetype -lz -lpng
