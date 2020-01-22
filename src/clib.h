@@ -1,7 +1,9 @@
 #ifndef __CLIB__
 #define __CLIB__
 
+#include <psp2/paf.h>
 #include <psp2/kernel/clib.h> 
+
 #define my_strlen(x) sceClibStrnlen(x, 1024)
 #define my_strcmp(x, y) sceClibStrncmp(x, y,  my_strlen(y)+1)
 #define my_strcpy(x, y) sceClibStrncpy(x, y, my_strlen(y)+1)
@@ -11,9 +13,11 @@
 #define my_vsprintf(x, y, z) sceClibVsnprintf(x, sizeof(x), y, z)
 #define my_vsnprintf(x, a, y, z) sceClibVsnprintf(x, a, y, z)
 #define my_strrchr(x, y) sceClibStrrchr(x, y)
-#define my_strchr strchr
+#define my_strchr sce_paf_private_strchr
 #define my_strstr(x, y) sceClibStrstr(x, y)
 #define my_strcat(x, y) sceClibStrncat(x, y, my_strlen(y)+1)
 #define my_memset(x, y, z) sceClibMemset(x, y, z)
+#define my_malloc malloc
+#define my_free free
 
 #endif

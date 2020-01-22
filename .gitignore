@@ -1,0 +1,12 @@
+out/*
+deps/libvita2d/libvita2d.a
+deps/libvita2d/source/*.o
+.vscode/*
+.cproject
+.project
+.settings/
+.clang-format
+GPATH
+GRTAGS
+GTAGS
+mktags

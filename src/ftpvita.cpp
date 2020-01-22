@@ -80,7 +80,7 @@ static void log_func(ftpvita_log_cb_t log_cb, const char *s, ...)
 		char buf[256];
 		va_list argptr;
 		va_start(argptr, s);
-		vsnprintf(buf, sizeof(buf), s, argptr);
+		my_vsnprintf(buf, sizeof(buf), s, argptr);
 		va_end(argptr);
 		log_cb(buf);
 	}
@@ -414,13 +414,13 @@ static void cmd_PWD_func(ftpvita_client_info_t *client)
 
 static int path_is_at_root(const char *path)
 {
-	return strrchr(path, '/') == (path + strlen(path) - 1);
+	return my_strrchr(path, '/') == (path + strlen(path) - 1);
 }
 
 static void dir_up(char *path)
 {
 	char *pch;
-	size_t len_in = strlen(path);
+	size_t len_in = my_strlen(path);
 	if (len_in == 1) {
 		my_strcpy(path, "/");
 		return;
@@ -524,7 +524,7 @@ static void send_file(ftpvita_client_info_t *client, const char *path)
 
 		sceIoLseek32(fd, client->restore_point, SCE_SEEK_SET);
 
-		buffer = (unsigned char*)malloc(file_buf_size);
+		buffer = (unsigned char*)my_malloc(file_buf_size);
 		if (buffer == NULL) {
 			client_send_ctrl_msg(client, "550 Could not allocate memory." FTPVITA_EOL);
 			return;
@@ -538,7 +538,7 @@ static void send_file(ftpvita_client_info_t *client, const char *path)
 		}
 
 		sceIoClose(fd);
-		free(buffer);
+		my_free(buffer);
 		client->restore_point = 0;
 		client_send_ctrl_msg(client, "226 Transfer completed." FTPVITA_EOL);
 		client_close_data_connection(client);
@@ -597,7 +597,7 @@ static void receive_file(ftpvita_client_info_t *client, const char *path)
 
 	if ((fd = sceIoOpen(path, mode, 0777)) >= 0) {
 
-		buffer = (unsigned char*)malloc(file_buf_size);
+		buffer = (unsigned char*)my_malloc(file_buf_size);
 		if (buffer == NULL) {
 			client_send_ctrl_msg(client, "550 Could not allocate memory." FTPVITA_EOL);
 			return;
@@ -611,7 +611,7 @@ static void receive_file(ftpvita_client_info_t *client, const char *path)
 		}
 
 		sceIoClose(fd);
-		free(buffer);
+		my_free(buffer);
 		client->restore_point = 0;
 		if (bytes_recv == 0) {
 			client_send_ctrl_msg(client, "226 Transfer completed." FTPVITA_EOL);
@@ -973,7 +973,7 @@ static int client_thread(SceSize args, void *argp)
 
 	DEBUG("Client thread %i exiting!\n", client->num);
 
-	free(client);
+	my_free(client);
 
 	sceKernelExitDeleteThread(0);
 	return 0;
@@ -1043,7 +1043,7 @@ static int server_thread(SceSize args, void *argp)
 			DEBUG("Client %i thread UID: 0x%08X\n", number_clients, client_thid);
 
 			/* Allocate the ftpvita_client_info_t struct for the new client */
-			ftpvita_client_info_t *client = (ftpvita_client_info_t*)malloc(sizeof(*client));
+			ftpvita_client_info_t *client = (ftpvita_client_info_t*)my_malloc(sizeof(*client));
 			client->num = number_clients;
 			client->thid = client_thid;
 			client->ctrl_sockfd = client_sockfd;
@@ -1088,7 +1088,7 @@ int ftpvita_init(char *vita_ip, unsigned short int *vita_port)
 		DEBUG("Net is already initialized.\n");
 		net_init = -1;
 	} else if (ret == SCE_NET_ERROR_ENOTINIT) {
-		net_memory = malloc(NET_INIT_SIZE);
+		net_memory = my_malloc(NET_INIT_SIZE);
 
 		initparam.memory = net_memory;
 		initparam.size = NET_INIT_SIZE;
@@ -1159,7 +1159,7 @@ error_netctlinit:
 	}
 error_netinit:
 	if (net_memory) {
-		free(net_memory);
+		my_free(net_memory);
 		net_memory = NULL;
 	}
 error_netstat:
@@ -1193,7 +1193,7 @@ void ftpvita_fini()
 		if (net_init == 0)
 			sceNetTerm();
 		if (net_memory)
-			free(net_memory);
+			my_free(net_memory);
 
 		netctl_init = -1;
 		net_init = -1;

@@ -127,10 +127,12 @@ class FTPLog {
         std::string str;
         GColor col;
     };
+    SceUID mutex = 0;
     FTPLog() 
     {
         fontHeight = 19;
         maxEntries = (440 / fontHeight) - 1;
+        mutex = sceKernelCreateMutex("ein_mutex_man_richtig_GEIL", 0, 0, NULL);
     }
 
     ~FTPLog() 
@@ -176,9 +178,6 @@ class FTPLog {
         SceDateTime time;
         sceRtcGetCurrentClockLocalTime(&time);
 
-        if (entries.size() > maxEntries)
-           entries.pop_back();
-
         char buf[1000] = "";
         va_list va_alist;
         va_start(va_alist, logtext);
@@ -212,17 +211,23 @@ class FTPLog {
         entry en;
         en.str = std::string(buftime) + e;
         en.col = col;
-
+        
+        sceKernelLockMutex(mutex, 1, 0);
+        if (entries.size() > maxEntries)
+           entries.pop_back();
         entries.push_front(en);
+        sceKernelUnlockMutex(mutex, 1);
     }
 
     void render()
     {
         int j = 0;
+        sceKernelLockMutex(mutex, 1, 0);
         for(auto &e : entries) {
             GFonts::text(GFonts::mainFont, 20, GFonts::left, GPoint(20, 500-j), e.col, e.str.c_str());
             j += fontHeight;
         }
+        sceKernelUnlockMutex(mutex, 1);
     }
 
     private:
@@ -238,7 +243,7 @@ GPage pageHomeScreen("FTPVita", [](void* arg) -> void {
 
     int runtime = m.now() / 1000 / 1000;
     int hours = (runtime / 3600);
-    int minutes = (runtime / 60) - (hours * 3600);
+    int minutes = (runtime / 60) - (hours * 60);
     int seconds = runtime - (minutes * 60);
     
     char buf[32] = { 0 };
@@ -260,11 +265,12 @@ GPage pageHomeScreen("FTPVita", [](void* arg) -> void {
 
     static uint64_t max_size = 0, free_size = 0;
     static int count = 0;
-    if(++count == 60) {
+    if(++count == 25 || count == 0) {
         //an expensive call. better not call in main/render thread
         sceAppMgrGetDevInfo("ux0:", &max_size, &free_size);
         count = 0;
     }
+    count++;
     
     GFonts::text(GFonts::mainFont, 20, GFonts::right, GPoint(950, 530), color_grey,
         "%.2f MB free", double(free_size) / 1000.0f / 1000.0f);
@@ -563,10 +569,9 @@ int main(int argc, char* argv[])
         auto start = GTimer::GetTickCount();
         if (doBreak || launch_ftp)
             break;
-        auto end = GTimer::GetTickCount();
-        gfx_render();
         
-        sceKernelDelayThread(83333);
+        gfx_render();        
+        sceDisplayWaitVblankStartMulti(3);
     } while (true);
 
     vita2d_fini();
