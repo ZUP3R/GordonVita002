@@ -6,6 +6,8 @@
 #include <psp2/kernel/threadmgr.h> 
 #include <psp2/net/net.h>
 #include <psp2/net/netctl.h>
+#include <psp2/io/stat.h> 
+#include <psp2/io/devctl.h> 
 #include <psp2/rtc.h>
 #include <psp2/sysmodule.h>
 #include <psp2/touch.h>
@@ -31,10 +33,13 @@
 
 using namespace std;
 
+#define UNUSED_PARAMETER(x) (void)x
+
 GTimer::Measure m;
 bool dolce = false;
 bool launch_ftp = false;
 bool doBreak = false;
+bool doReboot = false;
 char vita_ip[16] = {0};
 unsigned short int vita_port = 1337;
 
@@ -42,7 +47,11 @@ int run = 1;
 
 int app = 0;
 int eboot = 0;
-const char TITLE_ID[] = "GVITAV";
+int prx = 0;
+
+bool dev_reboot_on_module_upload = true;
+bool dev_launch_eboot_on_upload = true;
+
 char LAUNCH_TITLE_ID[10] = {0};
 static int showlog = 1;
 
@@ -121,6 +130,20 @@ public:
     void setIndex(int idx) { this->idx = idx; }
 };
 
+int connect_to_server(const char *host, unsigned short port) 
+{
+    SceNetSockaddrIn addr;
+    memset(&addr, 0, sizeof(addr));
+    sceNetInetPton(SCE_NET_AF_INET, host, &addr.sin_addr);
+    addr.sin_port = sceNetHtons(port);
+	addr.sin_family = SCE_NET_AF_INET;
+    addr.sin_len = sizeof(addr);
+
+    int sock = sceNetSocket("ein_unscheinbarer_socket", SCE_NET_AF_INET, SCE_NET_SOCK_STREAM, 0);
+	sceNetConnect(sock, (SceNetSockaddr*)&addr, sizeof(addr));
+    return sock;
+}
+
 class FTPLog {
     public:
     struct entry {
@@ -168,8 +191,7 @@ class FTPLog {
         if(!f)
             return;
 
-        fprintf(f, k.c_str());
-        fprintf(f, "\n");
+        fprintf(f, "%s %s\n", buftime, k.c_str());
         fclose(f);
     }
 
@@ -205,7 +227,7 @@ class FTPLog {
         rgb R;
         hsv2rgb(R.r, R.g, R.b, H.h, H.s, H.v);
         GColor col = GColor(uint8_t(R.r*255.0f), uint8_t(R.g*255.0f), uint8_t(R.b*255.0f), 255);
-        i += 3.0f;
+        i += 2.0f;
         
 
         entry en;
@@ -236,15 +258,27 @@ class FTPLog {
     int fontHeight;
 };
 
+bool path_exists(const char *path)
+{
+    SceIoStat st;
+    if(sceIoGetstat(path, &st) < 0)
+        return false;
+
+    return true;
+}
+
 FTPLog *g_pFTPLog = nullptr;
+SceUID mutex_space = 0;
+uint64_t max_size[4] = { 0 }, free_size[4] = { 0 };
+const char *devices[] = { "ur0:", "ux0:", "uma0:", "imc0:" };
 
 GPage pageHomeScreen("FTPVita", [](void* arg) -> void {
-    (void)arg;
+    UNUSED_PARAMETER(arg);
 
     int runtime = m.now() / 1000 / 1000;
     int hours = (runtime / 3600);
     int minutes = (runtime / 60) - (hours * 60);
-    int seconds = runtime - (minutes * 60);
+    int seconds = runtime - (minutes * 60) - (hours * 3600);
     
     char buf[32] = { 0 };
     my_snprintf(buf, sizeof(buf), "%ds", seconds);
@@ -257,23 +291,46 @@ GPage pageHomeScreen("FTPVita", [](void* arg) -> void {
         "Running since %s", buf);
 
      GFonts::text(GFonts::mainFont, 20, GFonts::left, GPoint(10, 530), color_grey,
-        "[ ] to exit, X to %s log, O to clear log, /\\ to turn screen off", showlog ? "hide" : "show");
+        "[ ] to exit, X to %s log, o to clear log, /\\ to turn screen off", showlog ? "hide" : "show");
 
     if(my_strlen(vita_ip)) 
         GFonts::text(GFonts::mainFont, 20, GFonts::left, GPoint(10, 50), color_white,
         "Listening on IP %s:%i\n", vita_ip, vita_port);
 
-    static uint64_t max_size = 0, free_size = 0;
     static int count = 0;
-    if(++count == 25 || count == 0) {
-        //an expensive call. better not call in main/render thread
-        sceAppMgrGetDevInfo("ux0:", &max_size, &free_size);
+    if(count == 100 || count == 0) {
+        pthread_t t;
+        pthread_create(&t, 0, [](void *arg) -> void* {
+            UNUSED_PARAMETER(arg);
+            for(int i = 0; i < 4; i++) {
+                if(path_exists(devices[i])) {
+                    //sceAppMgrGetDevInfo(devices[i], &max_size[i], &free_size[i]);
+                    SceIoDevInfo info;
+                    memset(&info, 0, sizeof(SceIoDevInfo));
+                    int res = sceIoDevctl(devices[i], 0x3001, NULL, 0, &info, sizeof(SceIoDevInfo));
+                    sceKernelLockMutex(mutex_space, 1, 0);
+                    free_size[i] = info.free_size;
+                    max_size[i] = info.max_size;
+                    sceKernelUnlockMutex(mutex_space, 1);
+                }
+            }
+            return 0;
+        }, 0);
+        pthread_detach(t);
         count = 0;
     }
     count++;
     
-    GFonts::text(GFonts::mainFont, 20, GFonts::right, GPoint(950, 530), color_grey,
-        "%.2f MB free", double(free_size) / 1000.0f / 1000.0f);
+    sceKernelLockMutex(mutex_space, 1, 0);
+    int y = 0;
+    for(int i = 3; i >= 0; i--) {
+        if(path_exists(devices[i])) {
+             GFonts::text(GFonts::mainFont, 20, GFonts::right, GPoint(950, 530 - y), color_grey,
+                "%s %.2f MB free", devices[i], double(free_size[i]) / 1000.0f / 1000.0f);
+            y += 19;
+        }
+     }
+    sceKernelUnlockMutex(mutex_space, 1);
 
     if(logo)
         vita2d_draw_texture(logo, 960 / 2 - 75, 544 / 2 - 62);
@@ -284,7 +341,7 @@ GPage pageHomeScreen("FTPVita", [](void* arg) -> void {
 });
 
 GPage pageNoWifi("No Wi-Fi", [](void* arg) -> void {
-    (void)arg;
+    UNUSED_PARAMETER(arg);
 
     GFonts::text(GFonts::mainFont, 20, GFonts::center, GPoint(960/2, 544/2-8), color_red, "You have to enable Wi-Fi");
     GFonts::text(GFonts::mainFont, 20, GFonts::center, GPoint(960/2, 544/2+8), color_red, "in order to run the server!");
@@ -298,13 +355,48 @@ static void info_log(const char *s)
     if(showlog)
 	    g_pFTPLog->add(s);
 
-	char *p = 0;
-	if ((p = my_strstr(s, TITLE_ID))) {
-		app = 1;
-		my_strncpy(LAUNCH_TITLE_ID, p, 9);
-	}
-	if(app && my_strstr(s, "STOR eboot.bin")) eboot = 1;
-	if(eboot && my_strstr(s, "QUIT")) doBreak = 1;
+    static unsigned int lines = 0;
+    static bool counting = false;
+    static char last_log[256] = { 0 };
+
+    if(counting) 
+        lines++;
+
+    if(my_strstr(s, "CWD") && my_strlen(s) == 19 && strstr(last_log, "app")) {
+        char *p = my_strrchr(s, ' ') + 1;
+        my_strncpy(LAUNCH_TITLE_ID, p, 9);
+        g_pFTPLog->add("TITLE_ID0=%s %d", LAUNCH_TITLE_ID, my_strlen(s));
+        app = 1;
+    }
+
+    strcpy(last_log, s);
+    
+    if(my_strstr(s, "CWD") && my_strlen(s) > (my_strlen("0> CWD /abc:/app") + 5)) {
+        char *p = 0;
+        if((p = my_strstr(s, "/app/"))) {
+            p += 5;
+            if(p[my_strlen(p)] == '/')
+                p[my_strlen(p)] = '\0';
+
+            my_strncpy(LAUNCH_TITLE_ID, p, 9);
+            app = 1;
+        }
+    }
+
+	if(my_strlen(LAUNCH_TITLE_ID) && my_strstr(s, "STOR eboot.bin")) { 
+        eboot = 1;
+        counting = true;
+    }
+    else if(my_strstr(s, "STOR") && (my_strstr(s, ".suprx") || my_strstr(s, ".skprx"))) { 
+        prx = 1;
+        counting = true;
+    }
+
+	if(dev_launch_eboot_on_upload && lines == 1 && eboot && my_strstr(s, "QUIT")) 
+        doBreak = 1;
+    else if(dev_reboot_on_module_upload && lines == 1 && prx && my_strstr(s, "QUIT")) 
+        doReboot = 1;
+    
 }
 
 namespace net {
@@ -433,14 +525,13 @@ public:
 GPageManager* g_pPageMgr = new GPageManager();
 
 void buttonPress(uint32_t key, uint64_t startPressTime) {
-    (void)key;
-    (void)startPressTime;
+    UNUSED_PARAMETER(key);
+    UNUSED_PARAMETER(startPressTime);
 }
 
 void buttonRelease(uint32_t key, uint64_t endPressTime, uint64_t duration)
 {
-    (void)endPressTime;
-    (void)duration;
+    UNUSED_PARAMETER(endPressTime);
 
     if (key == SCE_CTRL_SQUARE) {
         doBreak = true;
@@ -479,21 +570,24 @@ void gfx_render()
     draw();
     vita2d_end_drawing();
     vita2d_swap_buffers();
+    sceDisplayWaitVblankStartMulti(3);
 }
 
 int main(int argc, char* argv[])
 {
-    (void)argc;
-    (void)argv;
+    UNUSED_PARAMETER(argc);
+    UNUSED_PARAMETER(argv);
     m.start();
 
     auto tid = sceKernelCreateThread("anti-suspend-thread", [] (unsigned int a, void *b) -> int {
+        UNUSED_PARAMETER(a);
+        UNUSED_PARAMETER(b);
         for(;;) {
             sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DISABLE_AUTO_SUSPEND);
             sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DISABLE_OLED_OFF);
             //sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DISABLE_OLED_DIMMING);
             sceKernelDelayThread(250000);
-            if(doBreak)
+            if(doBreak || doReboot || launch_ftp)
                 break;
         }
         sceKernelExitDeleteThread(0);
@@ -501,7 +595,6 @@ int main(int argc, char* argv[])
     }, 0x10000100, 0x10000, 0, 0, nullptr);
     sceKernelStartThread(tid, 0, nullptr);
 
-	SceCtrlData pad;
 	SceAppUtilInitParam init_param;
 	SceAppUtilBootParam boot_param;
 
@@ -538,27 +631,17 @@ int main(int argc, char* argv[])
 		sceNetCtlInetGetState(&state);
         g_pPageMgr->set("No Wi-Fi");
 		gfx_render();
-        sceKernelDelayThread(83333);
     }
 
     g_pPageMgr->set("FTPVita");
     
-    ftpvita_add_device("app0:");
-	ftpvita_add_device("ux0:");
-	ftpvita_add_device("ur0:");
-	ftpvita_add_device("uma0:");
-	ftpvita_add_device("imc0:");
-	ftpvita_add_device("pd0:");
-	ftpvita_add_device("sa0:");
-	ftpvita_add_device("tm0:");
-	ftpvita_add_device("ud0:");
-	ftpvita_add_device("vs0:");
-	ftpvita_add_device("vd0:");
-	ftpvita_add_device("xmc0:");
-	ftpvita_add_device("gro0:");
-	ftpvita_add_device("grw0:");
-	ftpvita_add_device("hist0:");
-	ftpvita_add_device("tty");
+    const char *dev[] = {"app0:", "gro0:", "grw0:", "imc0:", "xmc0:", "pd0:", "sa0:", "sd0:",
+        "tm0:","ud0:", "uma0:", "ur0:", "ux0:", "vs0:","vd0:", "host0:"};
+
+
+    for(int i = 0; i < 16; i++) {
+        ftpvita_add_device(dev[i]);
+    }
 
 	if (sceAppUtilMusicMount() == 0)
 		ftpvita_add_device("music0:");
@@ -566,12 +649,10 @@ int main(int argc, char* argv[])
 		ftpvita_add_device("photo0:");
 
     do {
-        auto start = GTimer::GetTickCount();
-        if (doBreak || launch_ftp)
+        if (doBreak || launch_ftp || doReboot)
             break;
         
-        gfx_render();        
-        sceDisplayWaitVblankStartMulti(3);
+        gfx_render();
     } while (true);
 
     vita2d_fini();
@@ -587,7 +668,10 @@ int main(int argc, char* argv[])
     uint32_t timeout = 500;
     sceKernelWaitThreadEnd(tid, &status, &timeout);
     
-    if(launch_ftp) {
+    if(doReboot) {
+        scePowerRequestColdReset();
+    }
+    else if(launch_ftp) {
 
 		char uri[] = "psgm:play?titleid=GVITAX002";
 		sceAppMgrLaunchAppByUri(0x20000, uri);

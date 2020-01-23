@@ -66,7 +66,7 @@ vpksend2: $(OUT)/$(TARGET).vpk
 	curl -T $(OUT)/$(TARGET).vpk ftp://192.168.2.14:1337/ux0:/
 
 send1: $(OUT)/eboot.bin
-	@curl -s -T $(OUT)/eboot.bin ftp://192.168.2.15:1337/ux0:/app/$(TITLE_ID)/
+	@curl -s -T $(OUT)/eboot.bin ftp://10.0.0.8:1337/ux0:/app/$(TITLE_ID)/
 
 send2: $(OUT)/eboot.bin
 	curl -T $(OUT)/eboot.bin ftp://192.168.2.14:1337/ux0:/app/$(TITLE_ID)/

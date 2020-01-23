@@ -906,6 +906,8 @@ static void client_list_thread_end()
 
 static int client_thread(SceSize args, void *argp)
 {
+	UNUSED(args);
+
 	char cmd[16];
 	cmd_dispatch_func dispatch_func;
 	ftpvita_client_info_t *client = *(ftpvita_client_info_t **)argp;
@@ -983,6 +985,8 @@ static int server_thread(SceSize args, void *argp)
 {
 	int ret;
 	UNUSED(ret);
+	UNUSED(args);
+	UNUSED(argp);
 
 	SceNetSockaddrIn serveraddr;
 
